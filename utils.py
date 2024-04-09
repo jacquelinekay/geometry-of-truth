@@ -93,6 +93,8 @@ class DataManager:
         acts = collect_acts(dataset_name, model_size, layer, center=center, scale=scale, device=device)
         df = pd.read_csv(os.path.join(ROOT, 'datasets', f'{dataset_name}.csv'))
         labels = t.Tensor(df[label].values).to(device)
+        if len(labels) > len(acts):
+            labels = labels[:len(acts)]
 
         if split is None:
             self.data[dataset_name] = acts, labels
@@ -102,7 +104,7 @@ class DataManager:
             if seed is None:
                 seed = random.randint(0, 1000)
             t.manual_seed(seed)
-            train = t.randperm(len(df)) < int(split * len(df))
+            train = t.randperm(len(acts)) < int(split * len(acts))
             val = ~train
             self.data['train'][dataset_name] = acts[train], labels[train]
             self.data['val'][dataset_name] = acts[val], labels[val]

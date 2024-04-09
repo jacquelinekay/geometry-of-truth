@@ -25,6 +25,8 @@ class TruthData:
             # append activations to df
             data_dir = os.path.join("acts", model_size, dataset_name)
             acts = collect_acts(dataset_name, model_size, layer, center=center, scale=scale, device=device).cpu()
+            if len(acts) < len(df):
+                df = df[:len(acts)]
             df['activation'] = list(acts)
 
             dfs.append(df)
@@ -50,7 +52,7 @@ class TruthData:
         if pca_datasets is None:
             pca_datasets = self.df.index.levels[0].tolist()
         acts = self.df.loc[pca_datasets]['activation'].tolist()
-        acts = t.stack(acts, dim=0).cuda()
+        acts = t.stack(acts, dim=0)  # .cuda()
         pcs = get_pcs(acts, dimensions, offset=dim_offset)
 
         # project data onto pcs
@@ -58,7 +60,7 @@ class TruthData:
             plot_datasets = self.df.index.levels[0].tolist()
         df = self.df.loc[plot_datasets]
         acts = df['activation'].tolist()
-        acts = t.stack(acts, dim=0).cuda()
+        acts = t.stack(acts, dim=0)  # .cuda()
         proj = t.mm(acts, pcs)
 
         # add projected data to df
