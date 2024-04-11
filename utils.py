@@ -84,7 +84,7 @@ class DataManager:
         } # dictionary of datasets
         self.proj = None # projection matrix for dimensionality reduction
     
-    def add_dataset(self, dataset_name, model_size, layer, label='label', split=None, seed=None, center=True, scale=False, device='cpu'):
+    def add_dataset(self, dataset_name, model_size, layer, label='label', split=None, seed=None, center=True, scale=False, device='cpu', max_size=None):
         """
         Add a dataset to the DataManager.
         label : which column of the csv file to use as the labels.
@@ -93,8 +93,9 @@ class DataManager:
         acts = collect_acts(dataset_name, model_size, layer, center=center, scale=scale, device=device)
         df = pd.read_csv(os.path.join(ROOT, 'datasets', f'{dataset_name}.csv'))
         labels = t.Tensor(df[label].values).to(device)
-        if len(labels) > len(acts):
-            labels = labels[:len(acts)]
+        length = max_size or min(len(labels), len(acts))
+        labels = labels[:length]
+        acts = acts[:length]
 
         if split is None:
             self.data[dataset_name] = acts, labels
