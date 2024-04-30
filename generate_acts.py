@@ -38,7 +38,10 @@ def load_statements(dataset_name):
     """
     dataset = pd.read_csv(f"datasets/{dataset_name}.csv")
     statements = dataset['statement'].tolist()
-    return statements
+    correct = dataset['correct_answer'].tolist()
+    incorrect = dataset['incorrect_answers'].tolist()
+    # TODO: Attach answer metadata
+    return statements, correct, incorrect
 
 def get_acts(statements, tokenizer, model, layers, device):
     """
@@ -56,6 +59,7 @@ def get_acts(statements, tokenizer, model, layers, device):
     acts = {layer : [] for layer in layers}
     for statement in tqdm(statements):
         input_ids = tokenizer.encode(statement, return_tensors="pt").to(device)
+        # Also get the probabilities to score the model
         model(input_ids)
         for layer, hook in zip(layers, hooks):
             acts[layer].append(hook.out[0, -1])
@@ -68,6 +72,29 @@ def get_acts(statements, tokenizer, model, layers, device):
         handle.remove()
     
     return acts
+
+def score_probs(statement, tokenizer, model, device):
+    input_ids = tokenizer.encode(statement, return_tensors="pt").to(device)
+    outputs = model(input_ids)
+    # TODO: handle masking
+    probs = t.sum(outputs.logits.softmax(-1))
+    # TODO: Add normalization if necessary
+    return probs
+    
+
+def evaluate(statements, correct_answers, incorrect_answers, tokenizer, model, device):
+    # Construct N statements + answers, score probability of each
+    labels = [0]*len(statements)
+    for i, statement in statements:
+        correct = f'{statement} {correct_answers[i]}'
+        correct_prob = score_probs(correct, tokenizer, model, device)
+        incorrects = [f'{statement} {incorrect}'
+                      for incorrect in incorrect_answers]
+        incorrect_probs = [score_probs(incorrect, tokenizer, model, device)
+                           for incorrect in incorrects]
+        label = correct_prob > max(incorrect_probs)
+        labels[i] = label
+    return labels
 
 if __name__ == "__main__":
     """
@@ -89,7 +116,7 @@ if __name__ == "__main__":
     
     tokenizer, model = load_llama(args.model, args.device)
     for dataset in args.datasets:
-        statements = load_statements(dataset)
+        statements, correct_answer, incorrect_answers = load_statements(dataset)
         layers = [int(layer) for layer in args.layers]
         if layers == [-1]:
             layers = list(range(len(model.model.layers)))
@@ -99,5 +126,9 @@ if __name__ == "__main__":
 
         for idx in range(0, len(statements), 25):
             acts = get_acts(statements[idx:idx + 25], tokenizer, model, layers, args.device)
+            labels = evaluate(statements[idx:idx + 25], correct_answer[idx:idx + 25],
+                              incorrect_answers[idx:idx + 25],
+                              tokenizer, model, args.device)
+            # Save labels to new dataset?
             for layer, act in acts.items():
                     t.save(act, f"{save_dir}/layer_{layer}_{idx}.pt")
